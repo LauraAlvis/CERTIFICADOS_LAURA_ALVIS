@@ -2,13 +2,10 @@
 En este repositorio encontrará las diferentes herramientas que manejé para realizar el código que me permitió generar los diplomas de participación de la muestra de ingeniería industrial, teniendo en cuenta la base de datos proporcionada.
 ¡Claro\! Con gusto te ayudaré a generar un archivo **README** para tu repositorio de GitHub. El código que proporcionaste es un script de Python para la **Generación Masiva de Certificados** a partir de un archivo Excel y una plantilla de imagen.
 
-Aquí tienes un **README** estructurado y profesional que puedes usar:
 
 # 📜 Generador Masivo de Certificados (Python/Pillow)
 
 Script de Python diseñado para la automatización de la creación de certificados personalizados en formato PDF a partir de una lista de datos en un archivo Excel (`.xlsx`) y una plantilla de imagen (`.png`). Utiliza las librerías `pandas`, `Pillow` y `openpyxl` para el procesamiento de datos, la manipulación de imágenes y la gestión de archivos.
-
------
 
 ## 🚀 Características Principales
 
@@ -20,13 +17,11 @@ Script de Python diseñado para la automatización de la creación de certificad
       * Registra a los estudiantes sin código válido en un archivo Excel de "Datos Faltantes" para su posterior corrección.
   * **Estructura de Carpetas:** Organiza los archivos de entrada y salida en carpetas específicas.
 
------
 
 ## ⚙️ Estructura del Repositorio
 
 Asegúrate de que la estructura de carpetas de tu proyecto sea la siguiente:
 
-```
 .
 ├── CERTIFICADOS/              # 📁 Carpeta de SALIDA (Contiene los PDF generados)
 ├── DATOS/                     # 📁 Carpeta de ENTRADA (Contiene el archivo de datos)
@@ -41,7 +36,6 @@ Asegúrate de que la estructura de carpetas de tu proyecto sea la siguiente:
 └── generador_certificados.py  # 🐍 El script principal
 ```
 
------
 
 ## 📥 Requisitos
 
@@ -110,7 +104,3 @@ carpeta_certificados = r"C:\Users\ING\Desktop\Estudio\6 SEMESTRE\CIENCIA DE DATO
 ```python
 carpeta_certificados = "CERTIFICADOS_GENERADOS"
 ```
-
------
-
-¿Te gustaría que te ayude a **generar el archivo `requirements.txt`** con las dependencias exactas del proyecto?
