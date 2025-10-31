@@ -1,20 +1,20 @@
 # CERTIFICADOS_LAURA_ALVIS
 En este repositorio encontrará las diferentes herramientas que manejé para realizar el código que me permitió generar los diplomas de participación de la muestra de ingeniería industrial, teniendo en cuenta la base de datos proporcionada.
 
-# 📜 Generador Masivo de Certificados (Python/Pillow)
+# 📜 Generador Masivo de Certificados (Python/Pillow) 
 
-Script de Python diseñado para la automatización de la creación de certificados personalizados en formato PDF a partir de una lista de datos en un archivo Excel (`.xlsx`) y una plantilla de imagen (`.png`). Utiliza las librerías `pandas`, `Pillow` y `openpyxl` para el procesamiento de datos, la manipulación de imágenes y la gestión de archivos.
+Script de Python diseñado para la automatización de la creación de certificados personalizados en formato PDF a partir de una lista de datos en un archivo Excel (`.xlsx`) y una plantilla de imagen (`.png`). Esta versión incluye un **pre-procesamiento robusto de datos** y manejo de múltiples estudiantes por celda.
 
+-----
 
 ## 🚀 Características Principales
 
-  * **Procesamiento de Datos:** Lee los datos de estudiantes, proyectos y espacios académicos desde un archivo Excel.
-  * **Generación de Certificados:** Crea un certificado individual en formato **PDF** por cada estudiante con datos válidos.
-  * **Manejo Dinámico de Texto:** Ajusta automáticamente el tamaño y el espaciado del nombre del proyecto en el certificado para acomodar títulos largos.
-  * **Validación de Datos:**
-      * Verifica la presencia de campos clave (Nombre, Proyecto, Código, Espacio Académico).
-      * Registra a los estudiantes sin código válido en un archivo Excel de "Datos Faltantes" para su posterior corrección.
-  * **Estructura de Carpetas:** Organiza los archivos de entrada y salida en carpetas específicas.
+  * **Pre-procesamiento Robusto:** Analiza todo el archivo de datos para crear un mapa de códigos válidos, incluso si el código está en una fila diferente a la del proyecto.
+  * **Manejo de Grupos:** Soporta el registro de **múltiples estudiantes y códigos en una sola celda**, siempre y cuando estén separados por un guion (`-`).
+  * **Prevención de Duplicados:** Evita generar el mismo certificado más de una vez para un estudiante dentro del mismo espacio académico.
+  * **Manejo Dinámico de Texto:** Ajusta automáticamente el tamaño y el espaciado del nombre del proyecto.
+  * **Validación de Código:** Un código es válido si tiene más de 2 caracteres y no es numéricamente igual a cero.
+  * **Registro de Faltantes:** Registra los estudiantes sin código válido en un archivo Excel de "Datos Faltantes".
 
 -----
 
@@ -33,7 +33,7 @@ Asegúrate de que la estructura de carpetas de tu proyecto sea la siguiente:
 ├── FUENTES/                   # 📁 Carpeta de ENTRADA (Contiene los archivos de fuentes TrueType)
 │   ├── times.ttf
 │   ├── ITCEDSCR.TTF
-│   └── ... (otras fuentes usadas: Bodoni Bd BT Bold Italic.ttf, Bodoni Bd BT Bold.ttf, timesbd.TTF)
+│   └── ... (otras fuentes)
 └── generador_certificados.py  # 🐍 El script principal
 ```
 
@@ -55,32 +55,35 @@ pip install pandas Pillow openpyxl
 
 ### 1\. Archivo de Datos (`datos.xlsx`)
 
-El archivo Excel debe estar ubicado en la carpeta `DATOS/` y contener **obligatoriamente** las siguientes columnas:
+El archivo Excel debe estar ubicado en la carpeta `DATOS/` y debe contener las siguientes columnas, **leyendo todos los datos como texto (`str`) para evitar errores de tipo**.
 
-| Columna en Excel | Descripción |
-| :--- | :--- |
-| **Selecciona el espacio académico** | Nombre del espacio (materia, curso, etc.) donde se realizó el proyecto. |
-| **Nombre del Proyecto** | Título completo del proyecto. |
-| **Nombre completo del estudiante N** | Nombre del estudiante (donde N va de 1 a 4). |
-| **Código del estudiante N** | Código o ID del estudiante (donde N va de 1 a 4). |
+| Columna en Excel | Descripción | Formato de Datos |
+| :--- | :--- | :--- |
+| **Selecciona el espacio académico** | Nombre del espacio (materia, curso, etc.). | Texto |
+| **Nombre del Proyecto** | Título completo del proyecto. | Texto |
+| **Nombre completo del estudiante N** | Nombre del estudiante (donde N va de 1 a 4). | **Texto** (Soporta múltiples nombres separados por `-`) |
+| **Código del estudiante N** | Código o ID del estudiante (donde N va de 1 a 4). | **Texto** (Soporta múltiples códigos separados por `-`) |
 
-### 2\. Plantilla del Certificado (`plantilla.png.png`)
+> ⚠️ **Múltiples Estudiantes en la Misma Celda:**
+> Si tienes varios estudiantes en una sola celda (ej. si dos estudiantes presentaron el mismo proyecto), sepáralos usando un **guion (`-`)** tanto en la columna de nombres como en la de códigos, asegurando que el orden sea consistente.
+>
+>   * **`Nombre completo del estudiante 1`**: `Juan Pérez - María Gómez`
+>   * **`Código del estudiante 1`**: `12345678 - 87654321`
+
+### 2\. Plantilla y Fuentes
 
   * Ubica la imagen PNG de la plantilla en la carpeta `PLANTILLA/`.
-  * Asegúrate de que la plantilla sea compatible con las **coordenadas** y **tamaños de fuente** definidos en el script.
-  * El script está optimizado para un tamaño de imagen aproximado a un **A3 a 300dpi (2480x1754 píxeles)**, por lo que si tu plantilla es diferente, deberás ajustar las variables de posición (`posicion_...`) y el punto de anclaje central (`center_x`) dentro de la función `generar_certificado`.
-
-### 3\. Archivos de Fuente
-
-  * Coloca todos los archivos `.ttf` mencionados en el script (ej. `times.ttf`, `ITCEDSCR.TTF`, etc.) dentro de la carpeta `FUENTES/`.
+  * Coloca todos los archivos `.ttf` de las fuentes necesarias en la carpeta `FUENTES/`.
 
 -----
 
 ## ▶️ Uso
 
-1.  Asegúrate de haber completado los pasos de **Requisitos** y **Preparación de Archivos**.
+1.  Asegúrate de que tu ruta de salida en el código Python esté correcta (ver nota de la ruta abajo).
 
-2.  Ejecuta el script principal:
+2.  Asegúrate de haber completado la **Preparación de Archivos**.
+
+3.  Ejecuta el script principal:
 
     ```bash
     python generador_certificados.py
@@ -88,21 +91,21 @@ El archivo Excel debe estar ubicado en la carpeta `DATOS/` y contener **obligato
 
 ### Resultados de la Ejecución
 
-  * Los certificados generados se guardarán en la carpeta `CERTIFICADOS/` como archivos **PDF**.
-  * Si se encuentran estudiantes con nombre pero sin código o con un código inválido (longitud $\le 2$), el script generará el archivo `DATOS FALTANTES/estudiantes_sin_codigo.xlsx`.
+  * Los certificados generados se guardarán en la carpeta `CERTIFICADOS/` como archivos **PDF**, usando una combinación del nombre del estudiante, las primeras 30 letras del proyecto y el código para generar el nombre del archivo.
+  * Si se encuentran estudiantes con nombre pero sin un código válido, se creará el archivo **`DATOS FALTANTES/estudiantes_sin_codigo.xlsx`**.
 
 -----
 
-## ⚠️ Nota Importante sobre Rutas
+## ⚠️ Nota Importante sobre la Ruta de Salida
 
-El código utiliza una ruta absoluta para la carpeta de certificados, que **debe ser modificada** antes de usar el script en otro entorno:
+El código utiliza actualmente una **ruta absoluta** para la carpeta de certificados, la cual **debes modificar** para que funcione en tu máquina o servidor:
 
 ```python
-carpeta_certificados = r"C:\Users\ING\Desktop\Estudio\6 SEMESTRE\CIENCIA DE DATOS\3ER CORTE\CERTIFICADOS" # ¡CAMBIAR ESTA RUTA!
+carpeta_certificados = r"C:\Users\ING\Desktop\Estudio\6 SEMESTRE\CIENCIA DE DATOS\3ER CORTE\CERTIFICADOS" # ¡MODIFICAR ESTA RUTA!
 ```
 
-**Recomendación:** Cambia esta línea a una ruta relativa para mayor portabilidad, por ejemplo:
+**Recomendación:** Para hacerlo portable, cámbiala a una ruta relativa si deseas que los certificados se guarden dentro del mismo directorio del proyecto:
 
 ```python
-carpeta_certificados = "CERTIFICADOS_GENERADOS"
+carpeta_certificados = "CERTIFICADOS_GENERADOS" # Ejemplo de ruta relativa
 ```
