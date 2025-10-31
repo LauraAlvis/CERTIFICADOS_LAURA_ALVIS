@@ -28,17 +28,9 @@ def generar_certificados():
 
     # Leer el archivo Excel
     try:
-        # Especificar dtype para las columnas de código para evitar que pandas las interprete como números
-        dtype_mapping = {
-            "Código del estudiante 1": str,
-            "Código del estudiante 2": str,
-            "Código del estudiante 3": str,
-            "Código del estudiante 4": str,
-        }
-        df = pd.read_excel(excel_path, dtype=dtype_mapping)
-        # Limpiar posibles espacios en blanco en los códigos
-        for col in dtype_mapping.keys():
-            df[col] = df[col].str.strip()
+        # Forzar a que TODAS las columnas se lean como texto (string) para evitar errores de tipo.
+        # Esto es más robusto y previene que pandas interprete datos como números incorrectamente.
+        df = pd.read_excel(excel_path, dtype=str)
     except FileNotFoundError:
         print(f"Error: No se encontró el archivo Excel en la ruta: {excel_path}")
         return
@@ -67,65 +59,107 @@ def generar_certificados():
 
     # Lista para almacenar estudiantes sin código
     estudiantes_sin_codigo = []
+    # Conjunto para rastrear certificados generados y evitar duplicados (estudiante, espacio_academico)
+    certificados_generados = set()
+
+    # --- PASO 1: Pre-procesamiento para crear un mapa de códigos válidos ---
+    mapa_codigos_validos = {}
+    print("Analizando datos y creando mapa de códigos de estudiantes...")
+
+    # Función unificada para limpiar y validar datos. Devuelve el dato limpio o None si es inválido.
+    def obtener_dato_limpio(dato):
+        if pd.isnull(dato):
+            return None
+        texto_limpio = str(dato).strip()
+        if texto_limpio.lower() in ["", "nan", "."]:
+            return None
+        return texto_limpio
+
+    for index, row in df.iterrows():
+        for i in range(1, 5):
+            nombres_str = obtener_dato_limpio(row[f"Nombre completo del estudiante {i}"])
+            codigos_str = obtener_dato_limpio(row[f"Código del estudiante {i}"])
+
+            if not nombres_str or not codigos_str:
+                continue
+
+            nombres_lista = [n.strip() for n in nombres_str.split('-')]
+            codigos_lista = [c.strip() for c in codigos_str.split('-')]
+
+            # Procesar cada par de nombre/código, incluso si no hay guion
+            for nombre_estudiante, codigo_estudiante in zip(nombres_lista, codigos_lista):
+                if not nombre_estudiante or not codigo_estudiante:
+                    continue
+
+                # Un código es válido si existe, tiene más de 2 caracteres y no es numéricamente igual a cero.
+                codigo_es_valido = False
+                if len(codigo_estudiante) > 2:
+                    if not (codigo_estudiante.isdigit() and int(codigo_estudiante) == 0):
+                        codigo_es_valido = True
+
+                if codigo_es_valido:
+                    # Si el estudiante no está en el mapa, añadimos su código válido.
+                    nombre_estudiante_upper = nombre_estudiante.upper()
+                    if nombre_estudiante_upper not in mapa_codigos_validos:
+                        mapa_codigos_validos[nombre_estudiante_upper] = codigo_estudiante
 
     # Iterar sobre las filas del DataFrame
     for index, row in df.iterrows():
-        # Función auxiliar para validar los datos
-        # Un dato es válido si no es nulo, no está en blanco y no es solo un punto "."
-        def es_dato_valido(dato):
-            if pd.isnull(dato): return False
-            texto = str(dato).strip()
-            return texto != "" and texto != "."
-
         # Obtener datos generales del proyecto
-        espacio_academico = str(row["Selecciona el espacio académico"]).strip().upper() if es_dato_valido(row["Selecciona el espacio académico"]) else None
-        nombre_proyecto = str(row["Nombre del Proyecto"]).strip().upper() if es_dato_valido(row["Nombre del Proyecto"]) else None
+        nombre_proyecto = obtener_dato_limpio(row["Nombre del Proyecto"])
+        espacio_academico = obtener_dato_limpio(row["Selecciona el espacio académico"])
+        if not espacio_academico:
+            espacio_academico = "ESPACIO ACADÉMICO NO ESPECIFICADO"
 
         # Iterar sobre los estudiantes (hasta 4)
         for i in range(1, 5):
-            nombre_estudiante_col = f"Nombre completo del estudiante {i}"
-            codigo_estudiante_col = f"Código del estudiante {i}"
+            nombres_str = obtener_dato_limpio(row[f"Nombre completo del estudiante {i}"])
+            if not nombres_str:
+                continue
 
-            # Obtener datos del estudiante (inicialmente, sin validación de longitud de código)
-            nombre_estudiante = str(row[nombre_estudiante_col]).strip() if es_dato_valido(row[nombre_estudiante_col]) else None
-            codigo_estudiante = str(row[codigo_estudiante_col]).strip() if es_dato_valido(row[codigo_estudiante_col]) else None
+            nombres_lista = [n.strip() for n in nombres_str.split('-')]
 
-            # --- Validaciones de datos antes de generar el certificado ---
+            for nombre_estudiante_original in nombres_lista:
+                if not nombre_estudiante_original:
+                    continue
 
-            # 1. Validar que los datos esenciales (nombre, proyecto, espacio) estén presentes y sean válidos
-            if not nombre_estudiante or not espacio_academico or not nombre_proyecto:
-                # Si el nombre del estudiante no es válido, no lo rastreamos en estudiantes_sin_codigo
-                if nombre_estudiante: # Si el nombre es válido, pero falta otro dato esencial
-                    print(f"Advertencia: Datos esenciales (proyecto/espacio académico) faltantes o inválidos para {nombre_estudiante}. No se generará el certificado.")
-                continue # Saltar la generación de certificado para este estudiante
+                # --- Validaciones de datos antes de generar el certificado ---
+                # 1. Validar que los datos esenciales (nombre y proyecto) estén presentes.
+                if not nombre_proyecto:
+                    if nombre_estudiante_original:
+                        print(f"Advertencia: Nombre de proyecto faltante o inválido para {nombre_estudiante_original} en la fila {index+2}. No se generará el certificado.")
+                    continue
 
-            # 2. Validar el código del estudiante (presencia)
-            if not codigo_estudiante:
-                if nombre_estudiante: # Si el nombre es válido, pero el código no
-                    estudiantes_sin_codigo.append({"Nombre": nombre_estudiante})
-                    print(f"Advertencia: Código de estudiante faltante o inválido para {nombre_estudiante}. No se generará el certificado.")
-                continue # Saltar la generación de certificado
+                # 2. Obtener el código correcto desde el mapa de códigos válidos.
+                nombre_estudiante_upper = nombre_estudiante_original.upper()
+                codigo_estudiante = mapa_codigos_validos.get(nombre_estudiante_upper)
 
-            # 3. Nueva validación: longitud del código del estudiante
-            if len(codigo_estudiante) <= 2:
-                if nombre_estudiante: # Si el nombre es válido, pero el código es demasiado corto
-                    estudiantes_sin_codigo.append({"Nombre": nombre_estudiante})
-                    print(f"Advertencia: El código del estudiante {nombre_estudiante} ({codigo_estudiante}) tiene 2 o menos caracteres. No se generará el certificado.")
-                continue # Saltar la generación de certificado
+                if not codigo_estudiante:
+                    estudiantes_sin_codigo.append({"Nombre": nombre_estudiante_original})
+                    print(f"Error: No se pudo encontrar un código válido para {nombre_estudiante_original} en todo el archivo. No se generará el certificado para este proyecto.")
+                    continue
 
-            # Si todas las validaciones pasan, generar el certificado
-            # Generar el certificado
-            try:
-                generar_certificado(
-                    plantilla_path,
-                    carpeta_certificados,
-                    nombre_estudiante,
-                    codigo_estudiante,
-                    nombre_proyecto,
-                    espacio_academico
-                )
-            except Exception as e:
-                print(f"Error al generar el certificado para {nombre_estudiante}: {e}")
+                # 3. Verificar si ya se generó un certificado para este estudiante en este espacio académico
+                espacio_academico_upper = espacio_academico.upper()
+                identificador_certificado = (nombre_estudiante_upper, espacio_academico_upper)
+
+                if identificador_certificado in certificados_generados:
+                    print(f"Info: Certificado duplicado para '{nombre_estudiante_original}' en el espacio académico '{espacio_academico}'. Omitiendo.")
+                    continue
+
+                # Generar el certificado
+                try:
+                    generar_certificado(
+                        plantilla_path,
+                        carpeta_certificados,
+                        nombre_estudiante_original,
+                        codigo_estudiante,
+                        nombre_proyecto.upper(),
+                        espacio_academico_upper
+                    )
+                    certificados_generados.add(identificador_certificado)
+                except Exception as e:
+                    print(f"Error al generar el certificado para {nombre_estudiante_original}: {e}")
 
     # Crear archivo Excel con estudiantes sin código
     if estudiantes_sin_codigo:
@@ -208,46 +242,44 @@ def generar_certificado(plantilla_path, carpeta_certificados, nombre_estudiante,
     draw.text(posicion_diploma, "DIPLOMA", fill=color_amarillo, font=font_diploma, anchor="mm")
     draw.text(posicion_participacion, "PARTICIPACIÓN MUESTRA DE INGENIERÍA", fill=color_amarillo, font=font_participacion, anchor="mm")
     draw.text(posicion_intro_estudiante, "La facultad de Ingeniería Industrial Seccional Villavicencio, hace constar que el estudiante:", fill=color, font=font_intro, anchor="mm")
-    draw.text(posicion_nombre_estudiante, nombre_estudiante, fill=color, font=font_nombre_estudiante, anchor="mm")    
+    draw.text(posicion_nombre_estudiante, nombre_estudiante.title(), fill=color, font=font_nombre_estudiante, anchor="mm")    
     texto_combinado = f"con código o ID: {codigo_estudiante}, participó como ponente en modalidad póster con el proyecto:"
     draw.text(posicion_codigo_y_proyecto, texto_combinado, fill=color, font=font_intro, anchor="mm")
     
     # --- Bloque de nombre del proyecto (dinámico) ---
-    # Intentar con la fuente grande primero
-    current_font_proyecto = font_proyecto_nombre_large
-    width_wrap = 45 # Ancho para la fuente grande
-    lineas_proyecto = textwrap.wrap(nombre_proyecto, width=width_wrap)
+    # Esta función ahora se encarga de todo el proceso de dibujado del proyecto
+    def dibujar_texto_multilinea(texto, y_inicial):
+        # Intentar con la fuente grande primero
+        fuente_actual = font_proyecto_nombre_large
+        ancho_wrap = 45
+        lineas = textwrap.wrap(texto, width=ancho_wrap)
 
-    # Si el proyecto es muy largo (más de 2 líneas), reducir la fuente progresivamente
-    if len(lineas_proyecto) > 2: # Si con la fuente grande ocupa más de 2 líneas
-        current_font_proyecto = font_proyecto_nombre_small
-        width_wrap = 55 # Ancho para la fuente pequeña (más caracteres por línea)
-        lineas_proyecto = textwrap.wrap(nombre_proyecto, width=width_wrap)
+        # Si el proyecto es muy largo, reducir la fuente progresivamente
+        if len(lineas) > 2:
+            fuente_actual = font_proyecto_nombre_small
+            ancho_wrap = 55
+            lineas = textwrap.wrap(texto, width=ancho_wrap)
+        if len(lineas) > 3:
+            fuente_actual = font_proyecto_nombre_xsmall
+            ancho_wrap = 65
+            lineas = textwrap.wrap(texto, width=ancho_wrap)
 
-        # Si con la fuente mediana aún ocupa más de 3 líneas
-        if len(lineas_proyecto) > 3: 
-            current_font_proyecto = font_proyecto_nombre_xsmall
-            width_wrap = 65 # Ancho para la fuente más pequeña
-            lineas_proyecto = textwrap.wrap(nombre_proyecto, width=width_wrap)
+        y_actual = y_inicial
+        espacio_linea = 10
+        altura_linea_unica = fuente_actual.getbbox("A")[3] - fuente_actual.getbbox("A")[1]
 
-    y_actual_proyecto = initial_y_nombre_proyecto
-    
-    # Calcular la altura de una sola línea de texto del proyecto (para el offset)
-    # Usamos un texto de referencia para obtener la altura de la fuente
-    single_line_height_ref = current_font_proyecto.getbbox("Ejemplo de texto")[3] - current_font_proyecto.getbbox("Ejemplo de texto")[1]
-    line_spacing = 10 # Espacio entre líneas del proyecto
+        for linea in lineas:
+            draw.text((center_x, y_actual), linea, fill=color, font=fuente_actual, anchor="mm")
+            y_actual += altura_linea_unica + espacio_linea
+        
+        return y_actual - y_inicial # Devuelve la altura total del bloque de texto
 
-    for linea in lineas_proyecto:
-        draw.text((center_x, y_actual_proyecto), linea, fill=color, font=current_font_proyecto, anchor="mm")
-        text_height = current_font_proyecto.getbbox(linea)[3] - current_font_proyecto.getbbox(linea)[1]
-        y_actual_proyecto += text_height + line_spacing # Mover a la siguiente línea
+    altura_bloque_proyecto = dibujar_texto_multilinea(nombre_proyecto, initial_y_nombre_proyecto)
 
     # Calcular el offset para el texto subsiguiente
     # El offset es la altura adicional que tomó el bloque del proyecto más allá de una sola línea
-    total_project_block_height = y_actual_proyecto - initial_y_nombre_proyecto
-    single_line_project_block_height = single_line_height_ref + line_spacing # Altura que ocuparía una sola línea
-    
-    offset_y = total_project_block_height - single_line_project_block_height # Diferencia de altura
+    altura_linea_ref = font_proyecto_nombre_large.getbbox("A")[3] - font_proyecto_nombre_large.getbbox("A")[1] + 10
+    offset_y = altura_bloque_proyecto - altura_linea_ref
     if offset_y < 0: offset_y = 0 # Asegurarse de que el offset no sea negativo
 
     # --- Bloque de espacio académico y fecha (dinámico) ---
@@ -261,8 +293,18 @@ def generar_certificado(plantilla_path, carpeta_certificados, nombre_estudiante,
     pdf_canvas.paste(img, mask=img.split()[3]) # El canal Alpha (transparencia) se usa como máscara
 
     # Guardar el certificado como PDF
-    nombre_archivo = f"{nombre_estudiante.replace(' ', '_')}_{codigo_estudiante}.pdf"
-    ruta_archivo = os.path.join(carpeta_certificados, nombre_archivo)
+    # Incluir el nombre del proyecto para asegurar que cada archivo sea único
+    
+    # Sanitizar el nombre del archivo para eliminar caracteres inválidos (como ':')
+    def sanitizar_nombre_archivo(nombre):
+        caracteres_invalidos = '<>:"/\\|?*'
+        for char in caracteres_invalidos:
+            nombre = nombre.replace(char, '')
+        return nombre
+
+    nombre_archivo_base = f"{nombre_estudiante.replace(' ', '_')}_{nombre_proyecto.replace(' ', '_')[:30]}_{codigo_estudiante}"
+    nombre_archivo_sanitizado = sanitizar_nombre_archivo(nombre_archivo_base) + ".pdf"
+    ruta_archivo = os.path.join(carpeta_certificados, nombre_archivo_sanitizado)
     pdf_canvas.save(ruta_archivo, "PDF", resolution=100.0)
 
     print(f"Certificado generado para {nombre_estudiante} en: {ruta_archivo}")
